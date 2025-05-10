@@ -283,7 +283,7 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionID := uuid.New().String()
+	sessionID := s.getSessionID(r, true)
 	session := &sseSession{
 		writer:              w,
 		flusher:             flusher,
@@ -361,6 +361,7 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	if s.appendQueryToMessageEndpoint && len(r.URL.RawQuery) > 0 {
 		endpoint += "&" + r.URL.RawQuery
 	}
+	log.Println("endpoint=", endpoint)
 	fmt.Fprintf(w, "event: endpoint\ndata: %s\r\n\r\n", endpoint)
 	flusher.Flush()
 
@@ -405,7 +406,7 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionID := r.URL.Query().Get("sessionId")
+	sessionID := s.getSessionID(r, false)
 	if sessionID == "" {
 		s.writeJSONRPCError(w, nil, mcp.INVALID_PARAMS, "Missing sessionId")
 		return
@@ -656,4 +657,19 @@ func normalizeURLPath(elem ...string) string {
 	}
 
 	return joined
+}
+
+// getSessionID gets or generates a sessionID
+// createIfNotExist: if true, generates one if not present
+func (s *SSEServer) getSessionID(r *http.Request, createIfNotExist bool) string {
+	if sid := r.Header.Get("Mcp-Session-Id"); sid != "" {
+		return sid
+	}
+	if sid := r.URL.Query().Get("sessionId"); sid != "" {
+		return sid
+	}
+	if createIfNotExist {
+		return uuid.New().String()
+	}
+	return ""
 }
